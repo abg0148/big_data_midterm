@@ -62,6 +62,9 @@ mapred streaming -input midterm/data/plato.txt -output midterm/output/word_count
 
 # command 2
 mapred streaming -input midterm/output/word_count/* -output midterm/output/word_length_distribution -mapper "python q1_mapper2.py" -reducer "python q1_reducer2.py" -file q1_mapper2.py -file q1_reducer2.py
+
+# print top 10, num unique words, and total number of words
+hdfs dfs -cat midterm/output/word_count/part-* | python3 q1_stats.py > output/q1_report.txt
 ```
 
 ### Q2
