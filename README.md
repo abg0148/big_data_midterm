@@ -38,11 +38,11 @@ hadoop fs -put data/* midterm/data/
 
 > **Run the following commands to execute the scripts for the different questions**
 >
->
 > **Commands are followed by a brief explanation of whats happening in the scripts**
 >
->
 > **Please also look at the detailed comments provided within the scripts if you need help understanding the individual code components**
+
+---
 
 ### Q1
 
@@ -92,15 +92,15 @@ hdfs dfs -cat midterm/output/word_count/part-* | python3 q1_stats.py > output/q1
 > * Calculates the **total number of distinct orders** each customer made by counting unique `InvoiceNo` values.
 > * Computes the **total amount spent** by summing all line amounts (`Quantity * UnitPrice`) per order and then per customer.
 > * Derives the **average order value (AOV)** by dividing total spent by number of orders.
-> * Finds the **most frequently purchased product** for each customer by counting how many **distinct invoices** contained each product (`StockCode`) and selecting the one with the highest count.
+> * Finds the **most purchased product** for each customer based on the **total quantity** bought (not number of invoices).
 >
 > **Part B:**
 >
 > * Uses **window functions** to order each customer’s purchases by date and assigns an `order_number` to each order.
 > * Calculates **days since last order** (`days_since_last_order`) by finding the date difference between consecutive orders.
-> * Finds the **first** and **last product** purchased by each customer by joining the earliest and latest invoices with the product data.
+> * Finds the **first** and **last product** purchased by each customer by joining the earliest and latest orders with the product data.
 >
-> The results for both parts are saved as CSV files inside the folders:
+> The results for both parts are saved as CSV files inside:
 > `midterm/output/q2_partA_output/` and `midterm/output/q2_partB_output/`.
 
 ```bash
@@ -112,4 +112,37 @@ spark-submit --master local --deploy-mode client q2_ecommerce_processing.py
 # output files:
 #   midterm/output/q2_partA_output/
 #   midterm/output/q2_partB_output/
+```
+
+---
+
+### Q3
+
+**Explanation:**
+
+> The task in Q3 was to process nested JSON data from `q3_orders.json` using **PySpark**.
+> Each record represents an order with customer details and an array of products, where each product has `product_id`, `name`, `quantity`, and `price`.
+>
+> The goal was to **flatten** the nested structure and compute summaries at both product and customer levels.
+>
+> **Part A:**
+>
+> * Explodes the `products` array to have one row per product per order.
+> * Calculates the **total quantity** sold, **number of distinct orders**, and **total revenue** for each product.
+> * Saves the summarized product-level data in `midterm/output/q3_partA.csv`.
+>
+> **Part B:**
+>
+> * Creates a **pivot table** showing how many of each product (`product_id`) was purchased by each customer.
+> * Fills missing values with zero and adds a **Total** column showing each customer’s total items purchased.
+> * Saves the customer–product pivot table in `midterm/output/q3_partB.csv`.
+
+```bash
+## commands to execute code for q3
+
+spark-submit --master local --deploy-mode client q3_json_processing.py
+
+# output files:
+#   midterm/output/q3_partA.csv
+#   midterm/output/q3_partB.csv
 ```
