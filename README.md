@@ -1,29 +1,30 @@
 ### structure of the submitted zip for midterm
 
 ```
-ag10706_midterm.zip
-├── data                        # contains all data files for all the questions
-├── output                      # results and screenshots for all the expected outputs from all the questions
-├── q1_mapper.py                # mapper script for question 1
-├── q1_reducer.py               # reducer script for question 1
+abg0148-big_data_midterm/
+├── README.md                   # this file
+├── bonus.py                    # bonus question script (if attempted)
+├── gradic_rubric.md            # grading rubric for the midterm
+├── q1_mapper1.py               # mapper 1 script for question 1
+├── q1_reducer1.py              # reducer 1 script for question 1
+├── q1_mapper2.py               # mapper 2 script for question 1
+├── q1_reducer2.py              # reducer 2 script for question 1
+├── q1_stats.py                 # stats script to print top words and totals
 ├── q2_ecommerce_processing.py  # script for processing e-commerce data in question 2
 ├── q3_json_processing.py       # script for JSON data processing in question 3
 ├── q4_streaming.py             # script for streaming data processing in question 4
-├── bonus.py                    # bonus question script
-├── README.md                   # this file
-├── requirements.txt            # dependencies
-├── gradic_rubric.md            # grading rubric for the midterm
-└── submission_guidelines.md    # guidelines for submitting the midterm
+└── submission_guidelines.md    # submission and setup guidelines
 ```
 
-
 ### how to setup
+
 ```bash
-unzip ag10706_midterm.zip -d ag10706_midterm && cd ag10706_midterm
+unzip abg0148-big_data_midterm.zip -d abg0148-big_data_midterm && cd abg0148-big_data_midterm
 pip install -r requirements.txt
 ```
 
 ### data setup
+
 move data from your local fs to hdfs
 
 ```bash
@@ -35,14 +36,13 @@ hadoop fs -put data/* midterm/data/
 
 ### NOTE:
 
-> __Run the following commands to execute the scripts for the different questions__
-\
-\
-> __Commands are followed by a brief explanation of whats happening in the scripts__
-\
-\
-> __Please also look at the detailed comments provided within the scripts if you need help understanding the individual code components__
-
+> **Run the following commands to execute the scripts for the different questions**
+>
+>
+> **Commands are followed by a brief explanation of whats happening in the scripts**
+>
+>
+> **Please also look at the detailed comments provided within the scripts if you need help understanding the individual code components**
 
 ### Q1
 
@@ -90,17 +90,17 @@ hdfs dfs -cat midterm/output/word_count/part-* | python3 q1_stats.py > output/q1
 > **Part A:**
 >
 > * Calculates the **total number of distinct orders** each customer made by counting unique `InvoiceNo` values.
-> * Computes the **total amount spent** by summing the total order values for each customer.
+> * Computes the **total amount spent** by summing all line amounts (`Quantity * UnitPrice`) per order and then per customer.
 > * Derives the **average order value (AOV)** by dividing total spent by number of orders.
-> * Finds the **most frequently purchased product** for each customer. This is done by counting how many **distinct invoices** contained each product (`StockCode`) and picking the one that appeared in the **most orders**.
+> * Finds the **most frequently purchased product** for each customer by counting how many **distinct invoices** contained each product (`StockCode`) and selecting the one with the highest count.
 >
 > **Part B:**
 >
-> * Uses **window functions** to order each customer’s purchases by date and assigns an `order_number` to each.
-> * Calculates the **number of days since the last order** (`days_since_last_order`) using the difference between consecutive order dates.
-> * Identifies the **first** and **last product** purchased by each customer by finding products from their earliest and latest invoices.
+> * Uses **window functions** to order each customer’s purchases by date and assigns an `order_number` to each order.
+> * Calculates **days since last order** (`days_since_last_order`) by finding the date difference between consecutive orders.
+> * Finds the **first** and **last product** purchased by each customer by joining the earliest and latest invoices with the product data.
 >
-> The results for both parts are written as CSV files inside the output folders:
+> The results for both parts are saved as CSV files inside the folders:
 > `midterm/output/q2_partA_output/` and `midterm/output/q2_partB_output/`.
 
 ```bash
