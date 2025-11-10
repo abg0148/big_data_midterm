@@ -46,43 +46,70 @@ hadoop fs -put data/* midterm/data/
 
 ### Q1
 
-__Explanation:__
-> Given our data in `plato.txt`, the task was to write map reduce jobs to compute __word frequency count__, __word length distribution__, __total number of words processed__, __unique word count__, 
-\
-> the first mapper produces `{word} {1}` as key and value, which is used as the input for first reducer, which aggregates counts for all the unique keys and outputs it in part files inside the folder `midterm/output/word_count`
-\
-> this is then used as input for the second mapper, which produces `{len(word)} {1}` as key value, which is used by the second reducer to aggregate word length distribution and is stored in `midterm/output/word_length_distribution`
+**Explanation:**
 
+> The task in Q1 was to process the text file `plato.txt` using two MapReduce jobs.
+> The goal was to find **how many times each word appears**, the **distribution of word lengths**, and also the **total number of words** and **number of unique words** processed.
+>
+> In the first step, the mapper `q1_mapper1.py` reads each line, removes punctuation, converts text to lowercase, filters out stop words like *the, a, an, is, are*, and emits key-value pairs `{word} {1}`.
+>
+> The reducer `q1_reducer1.py` then adds up the counts for each word and stores the result as `{word}\t{count}` inside the folder `midterm/output/word_count`.
+>
+> In the second step, the mapper `q1_mapper2.py` reads the word counts and emits `{len(word)}\t{count}` so that each word contributes its frequency to its corresponding length bucket.
+>
+> The reducer `q1_reducer2.py` adds up all these counts for each word length and saves the result in `midterm/output/word_length_distribution`.
+>
+> Finally, the script `q1_stats.py` is used to print the **Top 20 words**, along with the **total number of words** and **unique word count**, for quick reference.
 
 ```bash
 ## commands to execute code for q1
 
-mapred streaming \
-  -D mapreduce.job.name="Q1 WordCount" \
-  -input midterm/data/plato.txt \
-  -output midterm/output/word_count \
-  -mapper  "python3 q1_mapper1.py" \
-  -reducer "python3 q1_reducer1.py" \
-  -combiner "python3 q1_reducer1.py" \
-  -file q1_mapper1.py -file q1_reducer1.py
+# step 1: count words
+mapred streaming -input midterm/data/plato.txt -output midterm/output/word_count \
+-mapper "python3 q1_mapper1.py" -reducer "python3 q1_reducer1.py" \
+-combiner "python3 q1_reducer1.py" -file q1_mapper1.py -file q1_reducer1.py
 
-# 2) Length distribution (token-weighted)
-mapred streaming \
-  -D mapreduce.job.name="Q1 LengthDist" \
-  -input  midterm/output/word_count/* \
-  -output midterm/output/word_length_distribution \
-  -mapper  "python3 q1_mapper2.py" \
-  -reducer "python3 q1_reducer2.py" \
-  -file q1_mapper2.py -file q1_reducer2.py
+# step 2: word length distribution
+mapred streaming -input midterm/output/word_count/* -output midterm/output/word_length_distribution \
+-mapper "python3 q1_mapper2.py" -reducer "python3 q1_reducer2.py" \
+-file q1_mapper2.py -file q1_reducer2.py
 
-# 3) Pretty print Top-20 + totals into a text report
+# step 3: print top words and statistics
 hdfs dfs -cat midterm/output/word_count/part-* | python3 q1_stats.py > output/q1_report.txt
 ```
 
+---
+
 ### Q2
 
-commands to execute for q2
+**Explanation:**
+
+> The task in Q2 was to analyze the dataset `online_retail.csv` using **PySpark** and generate useful customer insights.
+> The script first cleans the data by **removing rows with missing `CustomerID`** and **excluding cancelled invoices** (Invoice numbers starting with “C”). It also converts data types for easier processing.
+>
+> **Part A:**
+>
+> * Calculates the **total number of distinct orders** each customer made by counting unique `InvoiceNo` values.
+> * Computes the **total amount spent** by summing the total order values for each customer.
+> * Derives the **average order value (AOV)** by dividing total spent by number of orders.
+> * Finds the **most frequently purchased product** for each customer. This is done by counting how many **distinct invoices** contained each product (`StockCode`) and picking the one that appeared in the **most orders**.
+>
+> **Part B:**
+>
+> * Uses **window functions** to order each customer’s purchases by date and assigns an `order_number` to each.
+> * Calculates the **number of days since the last order** (`days_since_last_order`) using the difference between consecutive order dates.
+> * Identifies the **first** and **last product** purchased by each customer by finding products from their earliest and latest invoices.
+>
+> The results for both parts are written as CSV files inside the output folders:
+> `midterm/output/q2_partA_output/` and `midterm/output/q2_partB_output/`.
+
 ```bash
-# was having issues with cluster mode on dataproc, so just ran commands in client mode
+## commands to execute code for q2
+
+# run locally in client mode
 spark-submit --master local --deploy-mode client q2_ecommerce_processing.py
+
+# output files:
+#   midterm/output/q2_partA_output/
+#   midterm/output/q2_partB_output/
 ```
