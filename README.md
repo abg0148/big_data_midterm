@@ -57,13 +57,25 @@ __Explanation:__
 ```bash
 ## commands to execute code for q1
 
-# command 1
-mapred streaming -input midterm/data/plato.txt -output midterm/output/word_count -mapper "python q1_mapper1.py" -reducer "python q1_reducer1.py" -file q1_mapper1.py -file q1_reducer1.py
+mapred streaming \
+  -D mapreduce.job.name="Q1 WordCount" \
+  -input midterm/data/plato.txt \
+  -output midterm/output/word_count \
+  -mapper  "python3 q1_mapper1.py" \
+  -reducer "python3 q1_reducer1.py" \
+  -combiner "python3 q1_reducer1.py" \
+  -file q1_mapper1.py -file q1_reducer1.py
 
-# command 2
-mapred streaming -input midterm/output/word_count/* -output midterm/output/word_length_distribution -mapper "python q1_mapper2.py" -reducer "python q1_reducer2.py" -file q1_mapper2.py -file q1_reducer2.py
+# 2) Length distribution (token-weighted)
+mapred streaming \
+  -D mapreduce.job.name="Q1 LengthDist" \
+  -input  midterm/output/word_count/* \
+  -output midterm/output/word_length_distribution \
+  -mapper  "python3 q1_mapper2.py" \
+  -reducer "python3 q1_reducer2.py" \
+  -file q1_mapper2.py -file q1_reducer2.py
 
-# print top 10, num unique words, and total number of words
+# 3) Pretty print Top-20 + totals into a text report
 hdfs dfs -cat midterm/output/word_count/part-* | python3 q1_stats.py > output/q1_report.txt
 ```
 
