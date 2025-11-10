@@ -1,104 +1,144 @@
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-from pyspark.sql import Row
-from pyspark.sql.types import *
-
-df=spark.read.csv("midterm/data/online_retail.csv", inferSchema=True, header=True)
-
-
-schema = StructType(
-    [StructField('InvoiceNo', StringType(), True), 
-     StructField('StockCode', StringType(), True), 
-     StructField('Description', StringType(), True), 
-     StructField('Quantity', IntegerType(), True), 
-     StructField('InvoiceDate', StringType(), True), 
-     StructField('UnitPrice', DoubleType(), True), 
-     StructField('CustomerID', IntegerType(), True), 
-     StructField('Country', StringType(), True)]
-    )
-
-df2 = df.withColumn(
-        "InvoiceDateTS",
-        to_timestamp(trim(col("InvoiceDate")), "M/d/yyyy H:mm"))
-
-# filtered rows with null CustomerID
-customer_order_count = df2.filter(col("CustomerID").isNotNull()).groupBy("CustomerID").agg(count("InvoiceNo").alias("num_orders"))
-
-# total amount spent per order
-df2 = df2.withColumn("TotalAmount", round(col("Quantity")*col("UnitPrice"),2))
-
-customer_item_purchase_count = df2.groupBy("CustomerID", "StockCode").agg(count("*").alias("num_purchase"))
-most_purchased_item_count_per_customer = customer_item_purchase_count.groupBy("CustomerID").agg(max("num_purchase").alias("most_purchased_item_count"))
-
-
-
-c = customer_item_purchase_count.alias("c")
-m = most_purchased_item_count_per_customer.alias("m")
-
-most_purchased_item_per_customer = (
-    c.join(
-        m,
-        on=[
-            c.CustomerID == m.CustomerID,
-            c.num_purchase == m.most_purchased_item_count
-        ],
-        how="inner"
-    )
-    .select(
-        c.CustomerID.alias("CustomerID"),
-        c.StockCode.alias("StockCode"),
-        c.num_purchase.alias("num_purchase")
-    )
-)
-
-# for each customer, print total number of orders, most purchased product (StockCode) and number of times it was purchased, total amount spent across all orders, average order value
-customer_total_spent = df2.groupBy("CustomerID").agg(round(sum("TotalAmount"),2).alias("total_spent"))
-customer_order_count = df2.groupBy("CustomerID").agg(count("InvoiceNo").alias("num_orders"))
-customer_avg_order_value = customer_total_spent.join(customer_order_count, on="CustomerID").select(
-    "CustomerID",
-    "total_spent",
-    (col("total_spent") / col("num_orders")).alias("avg_order_value")
-)
-
-final_result = customer_order_count.alias("oc") \
-    .join(most_purchased_item_per_customer.alias("mp"), on="CustomerID") \
-    .join(customer_total_spent.alias("ts"), on="CustomerID") \
-    .join(customer_avg_order_value.alias("aov"), on="CustomerID") \
-    .select(
-        col("oc.CustomerID").alias("CustomerID"),
-        col("oc.num_orders").alias("num_orders"),
-        col("mp.StockCode").alias("top_product"),
-        col("mp.num_purchase").alias("most_purchased_item_count"),
-        col("ts.total_spent").alias("total_spent"),
-        col("aov.avg_order_value").alias("avg_order_value")
-    )
-    
-final_result.write.csv("midterm/output/q2_partA_output", header=True, mode="overwrite")
-
-# PART B
-
-# using window to rank orders by order date per customer
 from pyspark.sql.window import Window
+import sys
 
-window_spec = Window.partitionBy("CustomerID").orderBy("InvoiceDateTS")
+# Initialize spark session
+spark = SparkSession.builder.appName("Q2 E-commerce Analysis").getOrCreate()
+spark.conf.set("spark.sql.shuffle.partitions", "8")
 
-df3 = df2.withColumn("order_number", dense_rank().over(window_spec)).where(col("CustomerID").isNotNull())
+# Load & clean
+df = spark.read.csv("midterm/data/online_retail.csv", header=True, inferSchema=True)
 
-df3 = df3.withColumn("last_order", lag(col("InvoiceDateTS"), offset=1).over(window_spec)).withColumn("days_since_last_order", datediff(col("InvoiceDateTS"), col("last_order")))
-
-# replace null with 0 for days_since_last_order
-df3 = df3.withColumn("days_since_last_order", when(col("days_since_last_order").isNull(), 0).otherwise(col("days_since_last_order")))
-
-# first and last product purchased by each customer
-last_product_per_customer = df3.withColumn("rn", row_number().over(window_spec.orderBy(col("InvoiceDateTS").desc()))).filter(col("rn") == 1).select("CustomerID", col("StockCode").alias("last_product")).alias("lp").select("CustomerID", "last_product")
-
-first_product_per_customer = df3.filter(col("order_number") == 1).select("CustomerID", col("StockCode").alias("first_product")).alias("fp").select("CustomerID", "first_product")
-
-first_and_last_product_per_customer = first_product_per_customer.alias("fp").join(last_product_per_customer.alias("lp"), on="CustomerID").select(
-    col("fp.CustomerID").alias("CustomerID"),
-    col("fp.first_product").alias("first_product"),
-    col("lp.last_product").alias("last_product")
+df = (
+    df.withColumn("InvoiceDateTS", to_timestamp(trim(col("InvoiceDate")), "M/d/yyyy H:mm"))
+      .withColumn("Quantity", col("Quantity").cast("int"))
+      .withColumn("UnitPrice", col("UnitPrice").cast("double"))
+      .withColumn("CustomerID", col("CustomerID").cast("int"))
 )
 
-final_resultB = df3.join(first_and_last_product_per_customer, on="CustomerID")
+# Exclude rows without CustomerID and cancelled invoices (InvoiceNo starts with 'C')
+clean = df.where(col("CustomerID").isNotNull() & ~col("InvoiceNo").startswith("C"))
 
-final_resultB.write.csv("midterm/output/q2_partB_output", header=True, mode="overwrite")
+# Line amount per row
+clean = clean.withColumn("LineAmount", round(col("Quantity") * col("UnitPrice"), 2))
+
+# ============================================================
+# Part A
+#   - num_orders (distinct invoices)
+#   - total_spent (sum of order totals)
+#   - avg_order_value
+#   - most frequently purchased product = StockCode with most DISTINCT orders
+# ============================================================
+
+# Order totals per (CustomerID, InvoiceNo)
+order_totals = (
+    clean.groupBy("CustomerID", "InvoiceNo")
+         .agg(
+             round(sum("LineAmount"), 2).alias("OrderTotal"),
+             max("InvoiceDateTS").alias("OrderDate")
+         )
+)
+
+# Per-customer order counts and spend
+cust_orders = (
+    order_totals.groupBy("CustomerID")
+                .agg(
+                    countDistinct("InvoiceNo").alias("num_orders"),
+                    round(sum("OrderTotal"), 2).alias("total_spent")
+                )
+)
+
+# AOV
+cust_aov = cust_orders.select(
+    "CustomerID",
+    "num_orders",
+    "total_spent",
+    round(col("total_spent") / col("num_orders"), 2).alias("avg_order_value")
+)
+
+# Most frequently purchased product (by DISTINCT orders)
+cust_prod_orders = (
+    clean.select("CustomerID", "StockCode", "InvoiceNo")
+         .dropna()
+         .dropDuplicates(["CustomerID", "StockCode", "InvoiceNo"])
+         .groupBy("CustomerID", "StockCode")
+         .agg(countDistinct("InvoiceNo").alias("orders_of_product"))
+)
+
+w_top = Window.partitionBy("CustomerID") \
+              .orderBy(col("orders_of_product").desc(), col("StockCode").asc())
+
+top_product = (
+    cust_prod_orders
+        .withColumn("rn", row_number().over(w_top))
+        .where(col("rn") == 1)
+        .select(
+            col("CustomerID"),
+            col("StockCode").alias("top_product"),
+            col("orders_of_product").alias("most_purchased_item_count")
+        )
+)
+
+finalA = (
+    cust_aov.alias("a")
+        .join(top_product.alias("t"), on="CustomerID", how="left")
+        .select("CustomerID", "num_orders", "top_product",
+                "most_purchased_item_count", "total_spent", "avg_order_value")
+)
+
+finalA.coalesce(1).write.csv("midterm/output/q2_partA_output", header=True, mode="overwrite")
+
+# ============================================================
+# Part B
+#   - order_number per customer (by OrderDate)
+#   - days_since_last_order
+#   - first_product and last_product per customer
+# ============================================================
+
+w_order = Window.partitionBy("CustomerID").orderBy("OrderDate")
+
+ranked = (
+    order_totals
+        .withColumn("order_number", dense_rank().over(w_order))
+        .withColumn("last_order", lag("OrderDate", 1).over(w_order))
+        .withColumn(
+            "days_since_last_order",
+            when(col("last_order").isNull(), 0).otherwise(datediff(col("OrderDate"), col("last_order")))
+        )
+)
+
+# First and last invoices per customer
+first_inv = ranked.filter(col("order_number") == 1) \
+                  .select("CustomerID", col("InvoiceNo").alias("FirstInv"))
+
+last_inv = (
+    ranked.withColumn("rn_desc",
+                      row_number().over(Window.partitionBy("CustomerID").orderBy(col("OrderDate").desc())))
+          .filter(col("rn_desc") == 1)
+          .select("CustomerID", col("InvoiceNo").alias("LastInv"))
+)
+
+# Map invoices back to representative StockCode
+df_at_order = clean.select("CustomerID", "InvoiceNo", "StockCode", "InvoiceDateTS")
+
+first_prod = (
+    first_inv.join(df_at_order, on=["CustomerID", first_inv.FirstInv == df_at_order.InvoiceNo], how="left")
+             .select(df_at_order.CustomerID, col("StockCode").alias("first_product"))
+             .dropDuplicates(["CustomerID"])
+)
+
+last_prod = (
+    last_inv.join(df_at_order, on=["CustomerID", last_inv.LastInv == df_at_order.InvoiceNo], how="left")
+            .select(df_at_order.CustomerID, col("StockCode").alias("last_product"))
+            .dropDuplicates(["CustomerID"])
+)
+
+finalB = (ranked.join(first_prod, on="CustomerID", how="left")
+                .join(last_prod, on="CustomerID", how="left"))
+
+finalB.coalesce(1).write.csv("midterm/output/q2_partB_output", header=True, mode="overwrite")
+
+# Close Spark session and exit
+spark.stop()
+sys.exit(0)
