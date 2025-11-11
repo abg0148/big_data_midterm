@@ -3,7 +3,7 @@
 ```
 abg0148-big_data_midterm/
 ├── README.md                   # this file
-├── bonus.py                    # bonus question script (if attempted)
+├── bonus.ipynb                 # bonus question notebook
 ├── gradic_rubric.md            # grading rubric for the midterm
 ├── q1_mapper1.py               # mapper 1 script for question 1
 ├── q1_reducer1.py              # reducer 1 script for question 1
@@ -148,5 +148,5 @@ spark-submit --master local --deploy-mode client q3_json_processing.py
 ```
 
 
-### Q4
-for q4 wrote a notebook instead. this can be executed by uploading in jupyterhub assigned for the course
+### Q4 and Bonus
+for q4, Bonus, i added a notebook instead. this can be executed by uploading in jupyterhub assigned for the course
