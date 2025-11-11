@@ -12,7 +12,7 @@ abg0148-big_data_midterm/
 ├── q1_stats.py                 # stats script to print top words and totals
 ├── q2_ecommerce_processing.py  # script for processing e-commerce data in question 2
 ├── q3_json_processing.py       # script for JSON data processing in question 3
-├── q4_streaming.py             # script for streaming data processing in question 4
+├── q4.ipynb                    # notebook for streaming data processing in question 4
 └── submission_guidelines.md    # submission and setup guidelines
 ```
 
@@ -146,3 +146,7 @@ spark-submit --master local --deploy-mode client q3_json_processing.py
 #   midterm/output/q3_partA.csv
 #   midterm/output/q3_partB.csv
 ```
+
+
+### Q4
+for q4 wrote a notebook instead. this can be executed by uploading in jupyterhub assigned for the course
